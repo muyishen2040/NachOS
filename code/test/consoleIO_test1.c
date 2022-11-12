@@ -2,10 +2,10 @@
 
 int main() {
 	int n;
-	for (n=14; n<=19; n++) {
+	for (n=9; n>5; n--) {
 		PrintInt(n);
 	}
-	// Halt();
 	return 0;
-	
+	//Halt();
 }
+

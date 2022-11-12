@@ -21,12 +21,15 @@
 #include "machine.h"
 #include "noff.h"
 
+
+
 //----------------------------------------------------------------------
 // SwapHeader
 // 	Do little endian to big endian conversion on the bytes in the 
 //	object file header, in case the file was generated on a little
 //	endian machine, and we're now running on a big endian machine.
 //----------------------------------------------------------------------
+
 
 static void 
 SwapHeader (NoffHeader *noffH)
@@ -67,18 +70,20 @@ SwapHeader (NoffHeader *noffH)
 
 AddrSpace::AddrSpace()
 {
-    pageTable = new TranslationEntry[NumPhysPages];
+    /*pageTable = new TranslationEntry[NumPhysPages];
+    
     for (int i = 0; i < NumPhysPages; i++) {
 	pageTable[i].virtualPage = i;	// for now, virt page # = phys page #
-	pageTable[i].physicalPage = i;
+	pageTable[i].physicalPage = -1;
 	pageTable[i].valid = TRUE;
 	pageTable[i].use = FALSE;
 	pageTable[i].dirty = FALSE;
 	pageTable[i].readOnly = FALSE;  
     }
+
     
     // zero out the entire address space
-    bzero(kernel->machine->mainMemory, MemorySize);
+    bzero(kernel->machine->mainMemory, MemorySize);*/
 }
 
 //----------------------------------------------------------------------
@@ -88,7 +93,10 @@ AddrSpace::AddrSpace()
 
 AddrSpace::~AddrSpace()
 {
-   delete pageTable;
+    for(int i=0;i<numPages;i++)
+        kernel->usedPhysPage[pageTable[i].physicalPage] = false;
+    kernel->curPhysPage += numPages;
+    delete pageTable;
 }
 
 
@@ -135,16 +143,47 @@ AddrSpace::Load(char *fileName)
     numPages = divRoundUp(size, PageSize);
     size = numPages * PageSize;
 
-    ASSERT(numPages <= NumPhysPages);		// check we're not trying
+    if(numPages > NumPhysPages){
+        ExceptionHandler(MemoryLimitException);
+    }
+    
+   pageTable = new TranslationEntry[numPages];
+
+   for(int i=0;i<numPages;i++){
+        pageTable[i].virtualPage = i;
+        int physIdx=-1;
+        for(int j=0;j<NumPhysPages;j++){
+            if(kernel->usedPhysPage[j]==false){
+                physIdx = j;
+                break;
+            }
+        }
+        if(physIdx==-1){
+            ExceptionHandler(MemoryLimitException);
+            ASSERT(1 <= kernel->curPhysPage);    
+        }
+        else{
+            kernel->usedPhysPage[physIdx] = true;
+            kernel->curPhysPage -= 1;
+            bzero(&kernel->machine->mainMemory[physIdx*PageSize], PageSize);  
+            pageTable[i].physicalPage = physIdx;
+            pageTable[i].valid = TRUE;
+            pageTable[i].use = FALSE;
+            pageTable[i].dirty = FALSE;
+            pageTable[i].readOnly = FALSE;
+        }
+   }
+
+    
+    // ASSERT(numPages <= NumPhysPages);		// check we're not trying
 						// to run anything too big --
 						// at least until we have
 						// virtual memory
 
-    DEBUG(dbgAddr, "Initializing address space: " << numPages << ", " << size);
-
+                        
 // then, copy in the code and data segments into memory
 // Note: this code assumes that virtual address = physical address
-    if (noffH.code.size > 0) {
+    /*if (noffH.code.size > 0) {
         DEBUG(dbgAddr, "Initializing code segment.");
 	DEBUG(dbgAddr, noffH.code.virtualAddr << ", " << noffH.code.size);
         executable->ReadAt(
@@ -157,15 +196,62 @@ AddrSpace::Load(char *fileName)
         executable->ReadAt(
 		&(kernel->machine->mainMemory[noffH.initData.virtualAddr]),
 			noffH.initData.size, noffH.initData.inFileAddr);
+    }*/
+    int curPageIdx = 0;
+    
+    if (noffH.code.size > 0) {
+        DEBUG(dbgAddr, "Initializing code segment.");
+	    //DEBUG(dbgAddr, noffH.code.virtualAddr << ", " << noffH.code.size);
+        int codePageNum = noffH.code.size / PageSize;
+        // int codePageIdx = 0;
+        if(codePageNum*PageSize < noffH.code.size)
+            codePageNum+=1;
+        for(int codePageIdx=0; codePageIdx<codePageNum; codePageIdx++){
+            if(curPageIdx>=numPages||pageTable[curPageIdx].use)
+                ExceptionHandler(MemoryLimitException);
+            executable->ReadAt(
+		        &(kernel->machine->mainMemory[pageTable[curPageIdx].physicalPage*PageSize]),
+			    PageSize, noffH.code.inFileAddr+codePageIdx*PageSize);
+            pageTable[curPageIdx].use = true;
+            // pageTable[curPageIdx].readOnly = true;
+            curPageIdx+=1;
+        }
+    }
+
+    if (noffH.initData.size > 0) {
+        DEBUG(dbgAddr, "Initializing data segment.");
+        int dataPageNum = noffH.initData.size / PageSize;
+        if(dataPageNum*PageSize < noffH.initData.size)
+            dataPageNum+=1;
+        for(int dataPageIdx=0; dataPageIdx<dataPageNum; dataPageIdx++){
+            if(curPageIdx>=numPages||pageTable[curPageIdx].use)
+                ExceptionHandler(MemoryLimitException);
+            executable->ReadAt(
+		        &(kernel->machine->mainMemory[pageTable[curPageIdx].physicalPage*PageSize]),
+			    PageSize, noffH.initData.inFileAddr + dataPageIdx*PageSize);
+            pageTable[curPageIdx].use = true;
+            // pageTable[curPageIdx].readOnly = true;
+            curPageIdx+=1;    
+        }
     }
 
 #ifdef RDATA
+    
     if (noffH.readonlyData.size > 0) {
         DEBUG(dbgAddr, "Initializing read only data segment.");
-	DEBUG(dbgAddr, noffH.readonlyData.virtualAddr << ", " << noffH.readonlyData.size);
-        executable->ReadAt(
-		&(kernel->machine->mainMemory[noffH.readonlyData.virtualAddr]),
-			noffH.readonlyData.size, noffH.readonlyData.inFileAddr);
+        int rdataPageNum = noffH.readonlyData.size / PageSize;
+        if(rdataPageNum*PageSize < noffH.readonlyData.size)
+            rdataPageNum+=1;
+        for(int rdataPageIdx=0; rdataPageIdx<rdataPageNum; rdataPageIdx++){
+            if(curPageIdx>=numPages||pageTable[curPageIdx].use)
+                ExceptionHandler(MemoryLimitException);
+            executable->ReadAt(
+		        &(kernel->machine->mainMemory[pageTable[curPageIdx].physicalPage*PageSize]),
+			    PageSize, noffH.readonlyData.inFileAddr + rdataPageIdx*PageSize);
+            pageTable[curPageIdx].use = true;
+            pageTable[curPageIdx].readOnly = true;
+            curPageIdx+=1;    
+        }
     }
 #endif
 

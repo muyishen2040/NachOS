@@ -70,7 +70,9 @@ class Kernel {
     PostOfficeOutput *postOfficeOut;
 
     int hostName;               // machine identifier
-
+    bool usedPhysPage[NumPhysPages];
+    int curPhysPage;
+    
   private:
 
 	Thread* t[10];

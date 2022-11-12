@@ -26,6 +26,7 @@
 #include "syscall.h"
 #include "ksyscall.h"
 #include "debug.h"
+#include "machine.h"
 //----------------------------------------------------------------------
 // ExceptionHandler
 // 	Entry point into the Nachos kernel.  Called when a user program
@@ -199,6 +200,9 @@ ExceptionHandler(ExceptionType which)
 	    break;
 	}
 	break;
+	// case MemoryLimitException:
+	// 	cerr << "Memory Limit Exceeded " << (int)which << "\n";
+	// break;
 	default:
 		cerr << "Unexpected user mode exception " << (int)which << "\n";
 		break;

@@ -78,6 +78,8 @@ Kernel::Kernel(int argc, char **argv)
             cout << "Partial usage: nachos [-n #] [-m #]\n";
 		}
     }
+
+    
 }
 
 //----------------------------------------------------------------------
@@ -114,6 +116,10 @@ Kernel::Initialize()
     postOfficeIn = new PostOfficeInput(10);
     postOfficeOut = new PostOfficeOutput(reliability);
 
+    for(int i = 0; i < NumPhysPages; i++){
+        usedPhysPage[i] = false;
+    }
+    curPhysPage = NumPhysPages;
     interrupt->Enable();
 }
 

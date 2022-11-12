@@ -113,7 +113,7 @@ PROGRAMS = unknownhost
 else
 # change this if you create a new test program!
 #PROGRAMS = add halt shell matmult sort segments test1 test2 a
-PROGRAMS = add halt createFile fileIO_test1 fileIO_test2 custom_test LotOfAdd
+PROGRAMS = add halt createFile fileIO_test1 fileIO_test2 custom_test LotOfAdd consoleIO_test1 consoleIO_test2
 endif
 
 all: $(PROGRAMS)
